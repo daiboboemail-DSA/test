@@ -1,9 +1,41 @@
-import { supabase } from '../lib/supabase';
+import { supabase, isSupabaseReady } from '../lib/supabase';
+
+// 本地存储键名
+const STORAGE_KEY = 'case_library_cases';
+
+/**
+ * 从本地存储获取案例
+ */
+const getCasesFromLocalStorage = () => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch (error) {
+    console.error('Error reading from localStorage:', error);
+    return [];
+  }
+};
+
+/**
+ * 保存案例到本地存储
+ */
+const saveCasesToLocalStorage = (cases) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(cases));
+  } catch (error) {
+    console.error('Error saving to localStorage:', error);
+  }
+};
 
 /**
  * 获取所有案例
  */
 export const getCases = async () => {
+  // 如果 Supabase 未配置，使用本地存储
+  if (!isSupabaseReady()) {
+    return getCasesFromLocalStorage();
+  }
+
   try {
     const { data, error } = await supabase
       .from('cases')
@@ -14,7 +46,8 @@ export const getCases = async () => {
     return data || [];
   } catch (error) {
     console.error('Error fetching cases:', error);
-    return [];
+    // 降级到本地存储
+    return getCasesFromLocalStorage();
   }
 };
 
@@ -22,6 +55,11 @@ export const getCases = async () => {
  * 上传案例（包含图片）
  */
 export const createCase = async (caseData) => {
+  // 如果 Supabase 未配置，使用本地存储
+  if (!isSupabaseReady()) {
+    return createCaseLocal(caseData);
+  }
+
   try {
     // 1. 先上传图片到 Supabase Storage
     const beforeImageUrl = await uploadImage(caseData.beforeFile, `before_${Date.now()}`);
@@ -46,6 +84,52 @@ export const createCase = async (caseData) => {
     return data;
   } catch (error) {
     console.error('Error creating case:', error);
+    // 降级到本地存储
+    return createCaseLocal(caseData);
+  }
+};
+
+/**
+ * 本地存储创建案例（降级方案）
+ */
+const createCaseLocal = async (caseData) => {
+  try {
+    // 将文件转换为 base64
+    const fileToDataUrl = (file) =>
+      new Promise((resolve, reject) => {
+        if (typeof file === 'string' && file.startsWith('data:')) {
+          resolve(file);
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+    const [beforeImageUrl, afterImageUrl] = await Promise.all([
+      fileToDataUrl(caseData.beforeFile),
+      fileToDataUrl(caseData.afterFile),
+    ]);
+
+    const newCase = {
+      id: Date.now(),
+      title: caseData.title,
+      tag: caseData.tag || '未分类案例',
+      desc: caseData.desc || '效果显著',
+      before_image: beforeImageUrl,
+      after_image: afterImageUrl,
+      created_at: new Date().toISOString(),
+    };
+
+    // 保存到本地存储
+    const cases = getCasesFromLocalStorage();
+    cases.unshift(newCase);
+    saveCasesToLocalStorage(cases);
+
+    return newCase;
+  } catch (error) {
+    console.error('Error creating case locally:', error);
     throw error;
   }
 };
@@ -98,6 +182,11 @@ const uploadImage = async (file, fileName) => {
  * 删除案例
  */
 export const deleteCase = async (id) => {
+  // 如果 Supabase 未配置，使用本地存储
+  if (!isSupabaseReady()) {
+    return deleteCaseLocal(id);
+  }
+
   try {
     // 先获取案例数据，删除关联的图片
     const { data: caseData } = await supabase
@@ -128,6 +217,22 @@ export const deleteCase = async (id) => {
     return true;
   } catch (error) {
     console.error('Error deleting case:', error);
+    // 降级到本地存储
+    return deleteCaseLocal(id);
+  }
+};
+
+/**
+ * 本地存储删除案例（降级方案）
+ */
+const deleteCaseLocal = async (id) => {
+  try {
+    const cases = getCasesFromLocalStorage();
+    const filtered = cases.filter(c => c.id !== id);
+    saveCasesToLocalStorage(filtered);
+    return true;
+  } catch (error) {
+    console.error('Error deleting case locally:', error);
     throw error;
   }
 };

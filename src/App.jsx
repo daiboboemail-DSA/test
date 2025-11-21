@@ -699,7 +699,86 @@ const LadderSection = ({ data, onOpenModal }) => (
 
 const DialogueSection = ({ data }) => ( <section className="py-40 px-6 md:px-24 bg-white relative overflow-hidden" id={data.id}> <div className="max-w-5xl mx-auto relative z-10"> <Reveal className="text-center mb-24"> <span className="text-green-600 font-bold text-sm tracking-widest uppercase mb-6 block">{data.chapter}</span> <h2 className="text-6xl font-bold text-gray-900 tracking-tighter">{data.title}</h2> </Reveal> <div className="space-y-12 text-2xl md:text-3xl font-medium"> <Reveal delay={2} className="flex justify-start"> <div className="bg-[#f5f5f7] text-gray-500 px-10 py-8 rounded-[2rem] rounded-tl-none max-w-[85%] shadow-sm transform origin-top-left hover:scale-[1.02] transition-transform duration-300"> {data.bad} </div> </Reveal> <Reveal delay={4} className="flex justify-end"> <div className="bg-[#0071e3] text-white px-10 py-8 rounded-[2rem] rounded-tr-none shadow-2xl shadow-blue-200 max-w-[85%] transform origin-top-right hover:scale-[1.02] transition-transform duration-300 relative"> <div className="absolute -top-2 -right-2 w-4 h-4 bg-red-500 rounded-full border-2 border-white animate-ping"></div> {data.good} </div> </Reveal> </div> </div> </section> );
 const FooterSection = ({ data }) => ( <section className="py-48 px-6 bg-black text-white text-center relative overflow-hidden" id={data.id}> <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-gray-700 to-transparent"></div> <AmbientBg color="gray" /> <StarDust count={40} /> <div className="relative z-10"> <Reveal> <h2 className="text-7xl md:text-[9rem] font-black tracking-tighter mb-12 bg-clip-text text-transparent bg-gradient-to-b from-white to-gray-600 animate-breathe">{data.title}</h2> <p className="text-3xl text-gray-400 mb-16 font-light tracking-wide">{data.subtitle}</p> <button className="bg-white text-black px-12 py-5 rounded-full text-2xl font-bold hover:scale-105 hover:shadow-[0_0_40px_rgba(255,255,255,0.3)] transition-all duration-300 active:scale-95"> {data.action} </button> </Reveal> <div className="mt-32 text-gray-600 text-sm font-mono opacity-60"> Designed for Medical Aesthetics Training © 2025 </div> </div> </section> );
-const BeforeAfterSlider = ({ before, after, alt }) => { const [sliderPosition, setSliderPosition] = useState(50); const [isDragging, setIsDragging] = useState(false); const containerRef = useRef(null); const handleMove = useCallback((event) => { if (!isDragging || !containerRef.current) return; const rect = containerRef.current.getBoundingClientRect(); const x = event.type.includes('mouse') ? event.clientX : event.touches[0].clientX; const position = ((x - rect.left) / rect.width) * 100; setSliderPosition(Math.min(Math.max(position, 0), 100)); }, [isDragging]); const start = () => setIsDragging(true); const end = () => setIsDragging(false); useEffect(() => { window.addEventListener('mousemove', handleMove); window.addEventListener('mouseup', end); window.addEventListener('touchmove', handleMove); window.addEventListener('touchend', end); return () => { window.removeEventListener('mousemove', handleMove); window.removeEventListener('mouseup', end); window.removeEventListener('touchmove', handleMove); window.removeEventListener('touchend', end); }; }, [handleMove]); return ( <div ref={containerRef} className="relative w-full h-full max-h-[70vh] overflow-hidden cursor-ew-resize select-none group shadow-2xl rounded-3xl border-4 border-white/50 bg-gray-100 flex items-center justify-center" onMouseDown={start} onTouchStart={start}> <div className="relative w-full h-full flex items-center justify-center"> <img src={after} alt={`After ${alt}`} className="max-w-full max-h-full object-contain pointer-events-none" /> <div className="absolute top-6 right-6 bg-black/50 backdrop-blur-sm text-white text-sm font-bold px-4 py-2 rounded-full z-10">AFTER</div> <div className="absolute inset-0 w-full h-full overflow-hidden border-r-2 border-white box-content bg-gray-100 flex items-center justify-center" style={{ width: `${sliderPosition}%` }}> <div className="w-[100vw] max-w-none h-full flex items-center justify-center" style={{ width: containerRef.current ? containerRef.current.offsetWidth : '100vw' }}> <img src={before} alt={`Before ${alt}`} className="max-w-full max-h-full object-contain pointer-events-none" /> </div> <div className="absolute top-6 left-6 bg-white/80 backdrop-blur-sm text-black text-sm font-bold px-4 py-2 rounded-full">BEFORE</div> </div> </div> <div className="absolute top-0 bottom-0 w-12 -ml-6 flex items-center justify-center z-20 pointer-events-none group-hover:scale-110 transition-transform" style={{ left: `${sliderPosition}%` }}> <div className="w-12 h-12 bg-white rounded-full shadow-xl flex items-center justify-center text-gray-400 border border-gray-100"><GripVertical size={24} /></div> </div> </div> ); };
+const BeforeAfterSlider = ({ before, after, alt }) => {
+  const [sliderPosition, setSliderPosition] = useState(50);
+  const [isDragging, setIsDragging] = useState(false);
+  const containerRef = useRef(null);
+
+  const handleMove = useCallback(
+    (event) => {
+      if (!isDragging || !containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const x = event.type.includes('mouse') ? event.clientX : event.touches[0].clientX;
+      const position = ((x - rect.left) / rect.width) * 100;
+      setSliderPosition(Math.min(Math.max(position, 0), 100));
+    },
+    [isDragging]
+  );
+
+  const start = () => setIsDragging(true);
+  const end = () => setIsDragging(false);
+
+  useEffect(() => {
+    if (isDragging) {
+      window.addEventListener('mousemove', handleMove);
+      window.addEventListener('mouseup', end);
+      window.addEventListener('touchmove', handleMove);
+      window.addEventListener('touchend', end);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', end);
+      window.removeEventListener('touchmove', handleMove);
+      window.removeEventListener('touchend', end);
+    };
+  }, [isDragging, handleMove]);
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative w-full h-full max-h-[70vh] overflow-hidden cursor-ew-resize select-none group shadow-2xl rounded-3xl border-4 border-white/50 bg-gray-100"
+      onMouseDown={start}
+      onTouchStart={start}
+    >
+      {/* AFTER 图片 - 底层，完整显示 */}
+      <div className="absolute inset-0 w-full h-full">
+        <img
+          src={after}
+          alt={`After ${alt}`}
+          className="w-full h-full object-cover pointer-events-none"
+        />
+        <div className="absolute top-6 right-6 bg-black/50 backdrop-blur-sm text-white text-sm font-bold px-4 py-2 rounded-full z-10">
+          AFTER
+        </div>
+      </div>
+
+      {/* BEFORE 图片 - 上层，通过 clip-path 显示左侧部分 */}
+      <div
+        className="absolute inset-0 w-full h-full overflow-hidden"
+        style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }}
+      >
+        <img
+          src={before}
+          alt={`Before ${alt}`}
+          className="w-full h-full object-cover pointer-events-none"
+        />
+        <div className="absolute top-6 left-6 bg-white/80 backdrop-blur-sm text-black text-sm font-bold px-4 py-2 rounded-full z-10">
+          BEFORE
+        </div>
+      </div>
+
+      {/* 分割线和滑块 */}
+      <div
+        className="absolute top-0 bottom-0 w-1 bg-white/80 z-30 pointer-events-none shadow-lg"
+        style={{ left: `${sliderPosition}%`, transform: 'translateX(-50%)' }}
+      >
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 bg-white rounded-full shadow-xl flex items-center justify-center text-gray-400 border-2 border-gray-200 cursor-grab active:cursor-grabbing group-hover:scale-110 transition-transform">
+          <GripVertical size={24} />
+        </div>
+      </div>
+    </div>
+  );
+};
 const UploadModal = ({ isOpen, onClose, onSave }) => {
   const [title, setTitle] = useState('');
   const [tag, setTag] = useState('');

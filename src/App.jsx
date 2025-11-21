@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { ChevronDown, AlertCircle, Activity, Heart, Droplet, Frown, Smile, Thermometer, ArrowRight, Share2, Download, CheckCircle, Zap, Sun, Sparkles, Wind, Play, Pause, Volume2, VolumeX, Shield, X, Info, GripVertical, Plus, Settings, Image as ImageIcon, Upload, ChevronLeft, Menu, List, Star, Flame, Hammer, HardHat, Stethoscope, BookOpen, Eye, Grid, Layers, SplitSquareHorizontal, Package, Trash2, ChevronRight, Microscope, FileText, Quote, ShieldCheck, ShieldAlert, ZoomIn } from 'lucide-react';
+import { getCases, createCase, deleteCase } from './services/caseService';
 
 // -----------------------------------------------------------------------------
 // 1. 样式注入
@@ -724,16 +725,14 @@ const UploadModal = ({ isOpen, onClose, onSave }) => {
     }
 
     try {
-      const [beforeData, afterData] = await Promise.all([fileToDataUrl(beforeFile), fileToDataUrl(afterFile)]);
-      const newItem = {
-        id: Date.now(),
+      // 传递文件对象给 onSave，由 caseService 处理上传
+      await onSave({
         title,
         tag: tag || '未分类案例',
         desc: desc || '效果显著',
-        before: beforeData,
-        after: afterData,
-      };
-      onSave(newItem);
+        beforeFile,
+        afterFile,
+      });
       setTitle('');
       setTag('');
       setDesc('');
@@ -741,8 +740,8 @@ const UploadModal = ({ isOpen, onClose, onSave }) => {
       setAfterFile(null);
       onClose();
     } catch (error) {
-      console.error('Failed to read files', error);
-      alert('读取图片失败，请重试');
+      console.error('Failed to save case:', error);
+      alert('保存失败，请重试');
     }
   };
 
@@ -853,17 +852,66 @@ export default function AppleStyleScroll() {
   const [isModuleModal, setIsModuleModal] = useState(false);
   
   const initialCasesData = contentData.find(item => item.id === 'cases');
-  const [caseItems, setCaseItems] = useState(initialCasesData ? initialCasesData.items : []);
+  const [caseItems, setCaseItems] = useState([]);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const handleAddCase = (newCase) => {
-    setCaseItems(prev => [...prev, newCase]);
+  // 从数据库加载案例
+  useEffect(() => {
+    const loadCases = async () => {
+      try {
+        setIsLoading(true);
+        const cases = await getCases();
+        // 转换数据格式以匹配前端期望
+        const formattedCases = cases.map(caseItem => ({
+          id: caseItem.id,
+          title: caseItem.title,
+          tag: caseItem.tag,
+          desc: caseItem.desc,
+          before: caseItem.before_image,
+          after: caseItem.after_image,
+        }));
+        setCaseItems(formattedCases);
+      } catch (error) {
+        console.error('Failed to load cases:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadCases();
+  }, []);
+
+  const handleAddCase = async (caseData) => {
+    try {
+      // caseData 包含 { title, tag, desc, beforeFile, afterFile }
+      const newCase = await createCase(caseData);
+      // 转换数据格式
+      const formattedCase = {
+        id: newCase.id,
+        title: newCase.title,
+        tag: newCase.tag,
+        desc: newCase.desc,
+        before: newCase.before_image,
+        after: newCase.after_image,
+      };
+      setCaseItems(prev => [formattedCase, ...prev]);
+    } catch (error) {
+      console.error('Failed to create case:', error);
+      alert('上传失败，请检查网络连接或 Supabase 配置');
+    }
   };
 
-  // 新增：删除案例
-  const handleDeleteCase = (id) => {
-    setCaseItems(prev => prev.filter(item => item.id !== id));
+  // 删除案例
+  const handleDeleteCase = async (id) => {
+    if (!confirm('确定要删除这个案例吗？')) return;
+    try {
+      await deleteCase(id);
+      setCaseItems(prev => prev.filter(item => item.id !== id));
+    } catch (error) {
+      console.error('Failed to delete case:', error);
+      alert('删除失败，请重试');
+    }
   };
   
   const handleOpenModal = (content, isModule = false) => {

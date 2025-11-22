@@ -88,7 +88,7 @@ CREATE TABLE cases (
   id BIGSERIAL PRIMARY KEY,
   title VARCHAR(255) NOT NULL,
   tag VARCHAR(100),
-  desc TEXT,
+  "desc" TEXT,
   before_image TEXT,
   after_image TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

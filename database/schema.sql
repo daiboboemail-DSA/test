@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS cases (
   id BIGSERIAL PRIMARY KEY,
   title VARCHAR(255) NOT NULL,
   tag VARCHAR(100) DEFAULT '未分类案例',
-  desc TEXT DEFAULT '效果显著',
+  "desc" TEXT DEFAULT '效果显著',
   before_image TEXT NOT NULL,
   after_image TEXT NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

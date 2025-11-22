@@ -32,68 +32,62 @@ const saveCasesToLocalStorage = (cases) => {
  * 获取所有案例
  */
 export const getCases = async () => {
-  // 临时方案：完全禁用 Supabase，只使用本地存储
-  // TODO: 修复 Supabase 的 op is not a function 错误
-  console.log('⚠️ 使用本地存储获取案例（Supabase 暂时禁用）');
-  return getCasesFromLocalStorage();
-  
-  /* 原始 Supabase 代码（暂时禁用）
+  // 优先使用 Supabase 数据库
   const client = getSupabaseClient();
   if (!client) {
+    console.warn('Supabase 未配置，使用本地存储');
     return getCasesFromLocalStorage();
   }
 
   try {
-    const { data, error } = await client
+    // 安全地调用 Supabase
+    if (typeof client.from !== 'function') {
+      throw new Error('Supabase client.from is not a function');
+    }
+    
+    const queryResult = await client
       .from('cases')
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (error) throw error;
-    return data || [];
+    // 安全地检查返回结果
+    if (!queryResult) {
+      throw new Error('Query returned no result');
+    }
+    
+    if (queryResult.error) {
+      throw queryResult.error;
+    }
+
+    return queryResult.data || [];
   } catch (error) {
-    console.error('Error fetching cases:', error);
+    console.error('Error fetching cases from Supabase:', error);
+    // 降级到本地存储
     return getCasesFromLocalStorage();
   }
-  */
 };
 
 /**
  * 上传案例（包含图片）
  */
 export const createCase = async (caseData) => {
-  // 临时方案：完全禁用 Supabase，只使用本地存储
-  // TODO: 修复 Supabase 的 op is not a function 错误
-  console.warn('⚠️ 临时使用本地存储（Supabase 暂时禁用）');
-  return createCaseLocal(caseData);
-  
-  /* 原始 Supabase 代码（暂时禁用）
   // 检查 Supabase 是否可用
   const client = getSupabaseClient();
-  console.log('创建案例 - Supabase 检查:', {
-    isReady: isSupabaseReady(),
-    clientExists: !!client,
-    hasFromMethod: client ? typeof client.from === 'function' : false,
-    clientType: typeof client
-  });
-
-  // 如果 Supabase 未配置或无效，使用本地存储
   if (!client) {
-    console.warn('Supabase 不可用，使用本地存储');
+    console.warn('Supabase 未配置，使用本地存储');
     return createCaseLocal(caseData);
   }
 
   try {
-    console.log('开始创建案例，Supabase 状态:', isSupabaseReady());
-    console.log('Supabase 客户端:', client ? '已初始化' : '未初始化');
+    console.log('开始创建案例，使用 Supabase 数据库...');
     
-    // 1. 先上传图片（优先使用OSS，然后是Supabase，最后降级到Base64）
-    console.log('开始上传图片...');
+    // 1. 上传图片为 Base64（不使用 Supabase Storage，避免错误）
+    console.log('开始上传图片到 Base64...');
     const beforeImageUrl = await uploadImage(caseData.beforeFile, `before_${Date.now()}`);
     const afterImageUrl = await uploadImage(caseData.afterFile, `after_${Date.now()}`);
-    console.log('图片上传完成:', { beforeImageUrl: beforeImageUrl?.substring(0, 50), afterImageUrl: afterImageUrl?.substring(0, 50) });
+    console.log('图片上传完成（Base64 格式）');
 
-    // 2. 保存案例数据到数据库
+    // 2. 保存案例数据到 Supabase 数据库
     console.log('开始保存数据到数据库...');
     
     // 再次获取客户端，确保在异步操作中仍然有效
@@ -102,34 +96,38 @@ export const createCase = async (caseData) => {
       throw new Error('Supabase 客户端在操作过程中变为无效');
     }
     
+    if (typeof dbClient.from !== 'function') {
+      throw new Error('Supabase client.from is not a function');
+    }
+    
     const insertData = {
       title: caseData.title,
       tag: caseData.tag || '未分类案例',
       "desc": caseData.desc || '效果显著', // 注意：desc 需要用引号，因为它是保留关键字
-      before_image: beforeImageUrl,
-      after_image: afterImageUrl,
+      before_image: beforeImageUrl, // Base64 格式的图片
+      after_image: afterImageUrl,   // Base64 格式的图片
     };
-    console.log('插入数据:', insertData);
+    console.log('准备插入数据到数据库...');
     
-    const { data, error } = await dbClient
+    // 安全地调用 insert
+    const insertResult = await dbClient
       .from('cases')
       .insert([insertData])
       .select()
       .single();
 
-    if (error) {
-      console.error('数据库插入错误:', error);
-      console.error('错误详情:', {
-        message: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint
-      });
-      throw error;
+    // 安全地检查返回结果
+    if (!insertResult) {
+      throw new Error('Insert returned no result');
     }
     
-    console.log('数据保存成功:', data);
-    return data;
+    if (insertResult.error) {
+      console.error('数据库插入错误:', insertResult.error);
+      throw insertResult.error;
+    }
+    
+    console.log('✅ 数据保存成功到 Supabase 数据库');
+    return insertResult.data;
   } catch (error) {
     console.error('Error creating case:', error);
     console.error('Error details:', {
@@ -139,10 +137,9 @@ export const createCase = async (caseData) => {
       hint: error.hint
     });
     // 降级到本地存储
-    alert(`保存失败：${error.message}\n\n数据已保存到本地，但刷新后会丢失。\n请检查 Supabase 配置。`);
+    console.warn('降级到本地存储...');
     return createCaseLocal(caseData);
   }
-  */
 };
 
 /**
@@ -226,48 +223,41 @@ const uploadImage = async (file, fileName) => {
  * 删除案例
  */
 export const deleteCase = async (id) => {
-  // 临时方案：完全禁用 Supabase，只使用本地存储
-  // TODO: 修复 Supabase 的 op is not a function 错误
-  console.log('⚠️ 使用本地存储删除案例（Supabase 暂时禁用）');
-  return deleteCaseLocal(id);
-  
-  /* 原始 Supabase 代码（暂时禁用）
+  // 优先使用 Supabase 数据库
   const client = getSupabaseClient();
   if (!client) {
+    console.warn('Supabase 未配置，使用本地存储删除');
     return deleteCaseLocal(id);
   }
 
   try {
-    const { data: caseData } = await client
-      .from('cases')
-      .select('before_image, after_image')
-      .eq('id', id)
-      .single();
-
-    if (caseData) {
-      if (isOSSEnabled()) {
-        await deleteImageFromOSS(caseData.before_image);
-        await deleteImageFromOSS(caseData.after_image);
-      }
+    // 安全地调用 Supabase
+    if (typeof client.from !== 'function') {
+      throw new Error('Supabase client.from is not a function');
     }
 
-    const dbClient = getSupabaseClient();
-    if (!dbClient) {
-      throw new Error('Supabase 客户端在操作过程中变为无效');
-    }
-
-    const { error } = await dbClient
+    // 删除数据库记录
+    const deleteResult = await client
       .from('cases')
       .delete()
       .eq('id', id);
 
-    if (error) throw error;
+    // 安全地检查返回结果
+    if (!deleteResult) {
+      throw new Error('Delete returned no result');
+    }
+    
+    if (deleteResult.error) {
+      throw deleteResult.error;
+    }
+
+    console.log('✅ 案例已从 Supabase 数据库删除');
     return true;
   } catch (error) {
-    console.error('Error deleting case:', error);
+    console.error('Error deleting case from Supabase:', error);
+    // 降级到本地存储
     return deleteCaseLocal(id);
   }
-  */
 };
 
 /**

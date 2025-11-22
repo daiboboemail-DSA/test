@@ -57,8 +57,15 @@ export const getCases = async () => {
  */
 export const createCase = async (caseData) => {
   // 如果 Supabase 未配置，使用本地存储
-  if (!isSupabaseReady()) {
+  if (!isSupabaseReady() || !supabase) {
+    console.warn('Supabase 未配置，使用本地存储');
     return createCaseLocal(caseData);
+  }
+
+  // 验证 supabase 对象是否有效
+  if (typeof supabase.from !== 'function') {
+    console.error('Supabase 客户端无效，from 方法不存在');
+    throw new Error('Supabase 客户端未正确初始化');
   }
 
   try {
@@ -73,6 +80,13 @@ export const createCase = async (caseData) => {
 
     // 2. 保存案例数据到数据库
     console.log('开始保存数据到数据库...');
+    console.log('Supabase 客户端类型:', typeof supabase);
+    console.log('Supabase from 方法:', typeof supabase?.from);
+    
+    if (!supabase || typeof supabase.from !== 'function') {
+      throw new Error('Supabase 客户端未正确初始化');
+    }
+    
     const insertData = {
       title: caseData.title,
       tag: caseData.tag || '未分类案例',
@@ -120,38 +134,34 @@ export const createCase = async (caseData) => {
  */
 const createCaseLocal = async (caseData) => {
   try {
-    // 将文件转换为 base64
-    const fileToDataUrl = (file) =>
-      new Promise((resolve, reject) => {
-        if (typeof file === 'string' && file.startsWith('data:')) {
-          resolve(file);
-          return;
-        }
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-
-    const [beforeImageUrl, afterImageUrl] = await Promise.all([
-      fileToDataUrl(caseData.beforeFile),
-      fileToDataUrl(caseData.afterFile),
-    ]);
-
+    // 注意：本地存储不适合存储大图片（Base64），会导致 QuotaExceededError
+    // 这里只保存文本信息，不保存图片
+    console.warn('⚠️ 使用本地存储（Supabase 未配置或连接失败）');
+    console.warn('⚠️ 本地存储不支持大图片，只保存文本信息');
+    
     const newCase = {
       id: Date.now(),
       title: caseData.title,
       tag: caseData.tag || '未分类案例',
       desc: caseData.desc || '效果显著',
-      before_image: beforeImageUrl,
-      after_image: afterImageUrl,
+      before_image: '[本地存储不支持图片]',
+      after_image: '[本地存储不支持图片]',
       created_at: new Date().toISOString(),
     };
 
-    // 保存到本地存储
-    const cases = getCasesFromLocalStorage();
-    cases.unshift(newCase);
-    saveCasesToLocalStorage(cases);
+    // 保存到本地存储（只保存文本信息）
+    try {
+      const cases = getCasesFromLocalStorage();
+      cases.unshift(newCase);
+      saveCasesToLocalStorage(cases);
+    } catch (storageError) {
+      if (storageError.name === 'QuotaExceededError') {
+        console.error('❌ 本地存储空间已满，无法保存数据');
+        alert('存储空间不足，无法保存到本地。请配置 Supabase 以使用云端存储。');
+        throw new Error('本地存储空间已满');
+      }
+      throw storageError;
+    }
 
     return newCase;
   } catch (error) {

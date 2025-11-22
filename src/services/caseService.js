@@ -85,7 +85,14 @@ export const createCase = async (caseData) => {
     return data;
   } catch (error) {
     console.error('Error creating case:', error);
+    console.error('Error details:', {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint
+    });
     // 降级到本地存储
+    alert(`保存失败：${error.message}\n\n数据已保存到本地，但刷新后会丢失。\n请检查 Supabase 配置。`);
     return createCaseLocal(caseData);
   }
 };

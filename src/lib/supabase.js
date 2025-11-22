@@ -22,10 +22,32 @@ if (typeof window !== 'undefined') {
 }
 
 // 如果未配置，创建一个虚拟客户端（避免崩溃）
-export const supabase = isSupabaseConfigured
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : null;
+let supabaseClient = null;
+
+if (isSupabaseConfigured) {
+  try {
+    supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+    console.log('Supabase 客户端创建成功');
+  } catch (error) {
+    console.error('创建 Supabase 客户端失败:', error);
+    supabaseClient = null;
+  }
+} else {
+  console.warn('Supabase 未配置，客户端为 null');
+}
+
+export const supabase = supabaseClient;
 
 // 导出配置状态，供其他模块使用
-export const isSupabaseReady = () => isSupabaseConfigured;
+export const isSupabaseReady = () => {
+  const ready = isSupabaseConfigured && supabase !== null && typeof supabase?.from === 'function';
+  if (!ready && isSupabaseConfigured) {
+    console.error('Supabase 配置了但客户端无效:', {
+      isConfigured: isSupabaseConfigured,
+      supabaseIsNull: supabase === null,
+      hasFromMethod: typeof supabase?.from === 'function'
+    });
+  }
+  return ready;
+};
 

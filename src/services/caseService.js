@@ -56,16 +56,19 @@ export const getCases = async () => {
  * 上传案例（包含图片）
  */
 export const createCase = async (caseData) => {
-  // 如果 Supabase 未配置，使用本地存储
-  if (!isSupabaseReady() || !supabase) {
-    console.warn('Supabase 未配置，使用本地存储');
-    return createCaseLocal(caseData);
-  }
+  // 检查 Supabase 是否可用
+  const supabaseReady = isSupabaseReady();
+  console.log('创建案例 - Supabase 检查:', {
+    isReady: supabaseReady,
+    supabaseExists: !!supabase,
+    hasFromMethod: typeof supabase?.from === 'function',
+    supabaseType: typeof supabase
+  });
 
-  // 验证 supabase 对象是否有效
-  if (typeof supabase.from !== 'function') {
-    console.error('Supabase 客户端无效，from 方法不存在');
-    throw new Error('Supabase 客户端未正确初始化');
+  // 如果 Supabase 未配置或无效，使用本地存储
+  if (!supabaseReady || !supabase || typeof supabase.from !== 'function') {
+    console.warn('Supabase 不可用，使用本地存储');
+    return createCaseLocal(caseData);
   }
 
   try {

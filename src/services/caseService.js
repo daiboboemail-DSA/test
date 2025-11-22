@@ -1,4 +1,4 @@
-import { supabase, isSupabaseReady, getSupabaseClient } from '../lib/supabase';
+import { isSupabaseReady, getSupabaseClient } from '../lib/supabase';
 import { uploadImageToOSS, deleteImageFromOSS, isOSSEnabled } from './ossService';
 
 // 本地存储键名
@@ -213,25 +213,41 @@ const uploadImage = async (file, fileName) => {
 
       // 再次获取客户端，确保在异步操作中仍然有效
       const storageClient = getSupabaseClient();
-      if (!storageClient || !storageClient.storage || typeof storageClient.storage.from !== 'function') {
+      if (!storageClient) {
+        throw new Error('Supabase client not available');
+      }
+      if (!storageClient.storage) {
         throw new Error('Supabase storage not available');
       }
+      if (typeof storageClient.storage.from !== 'function') {
+        throw new Error('Supabase storage.from is not a function');
+      }
 
-      const { data, error } = await storageClient.storage
-        .from('case-images')
-        .upload(filePath, blob, {
-          cacheControl: '3600',
-          upsert: false,
-        });
+      // 安全地获取 storage bucket
+      const bucket = storageClient.storage.from('case-images');
+      if (!bucket || typeof bucket.upload !== 'function') {
+        throw new Error('Supabase storage bucket is invalid');
+      }
+
+      const { data, error } = await bucket.upload(filePath, blob, {
+        cacheControl: '3600',
+        upsert: false,
+      });
 
       if (error) throw error;
 
-      // 获取公开 URL
-      const { data: { publicUrl } } = storageClient.storage
-        .from('case-images')
-        .getPublicUrl(filePath);
+      // 获取公开 URL - 再次验证
+      const urlBucket = storageClient.storage.from('case-images');
+      if (!urlBucket || typeof urlBucket.getPublicUrl !== 'function') {
+        throw new Error('Supabase getPublicUrl is not available');
+      }
 
-      return publicUrl;
+      const { data: urlData } = urlBucket.getPublicUrl(filePath);
+      if (!urlData || !urlData.publicUrl) {
+        throw new Error('Failed to get public URL');
+      }
+
+      return urlData.publicUrl;
     } catch (error) {
       console.warn('Supabase upload failed, using Base64:', error);
     }

@@ -1064,7 +1064,6 @@ export default function AppleStyleScroll() {
         </div>
         <div className="flex items-center gap-4">
            <button className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-600" onClick={() => setIsMenuOpen(true)} title="目录"><List size={18} /></button>
-          <button className="bg-black text-white text-xs px-4 py-1.5 rounded-full font-medium hover:bg-gray-800 transition-colors flex items-center gap-2 shadow-lg"><Download size={12} /><span>PDF</span></button>
         </div>
       </div>
 

@@ -144,30 +144,58 @@ CREATE POLICY "Allow public delete" ON cases
 2. 创建成功
 
 ### 4.4 设置存储策略（允许上传和删除）
+
+⚠️ **重要**：需要创建 **3 个独立的策略**，每个策略只配置一个操作。
+
+#### 策略一：允许上传图片（INSERT）
+
 1. 在 Storage 页面，点击 `case-images` 存储桶
 2. 点击 **"Policies"** 标签
 3. 点击 **"New Policy"**
-4. 选择 **"For full customization"**
-5. 在 SQL 编辑器中，粘贴以下代码：
+4. 填写表单：
+   - **Policy name**：输入 `Allow public uploads`
+   - **Allowed operation**：✅ **只勾选 "INSERT"**（其他不要勾选）
+   - **Target roles**：保持默认（不需要修改）
+   - **Policy definition**：在代码编辑器中输入：
+     ```sql
+     bucket_id = 'case-images'
+     ```
+5. 点击 **"Review"**，然后点击 **"Save policy"**
 
-```sql
--- 允许所有人上传图片
-CREATE POLICY "Allow public uploads"
-ON storage.objects FOR INSERT
-WITH CHECK (bucket_id = 'case-images');
+#### 策略二：允许查看图片（SELECT）
 
--- 允许所有人读取图片
-CREATE POLICY "Allow public access"
-ON storage.objects FOR SELECT
-USING (bucket_id = 'case-images');
+1. 再次点击 **"New Policy"**
+2. 填写表单：
+   - **Policy name**：输入 `Allow public access`
+   - **Allowed operation**：✅ **只勾选 "SELECT"**（其他不要勾选）
+   - **Target roles**：保持默认
+   - **Policy definition**：输入：
+     ```sql
+     bucket_id = 'case-images'
+     ```
+3. 点击 **"Review"**，然后点击 **"Save policy"**
 
--- 允许所有人删除图片
-CREATE POLICY "Allow public deletes"
-ON storage.objects FOR DELETE
-USING (bucket_id = 'case-images');
-```
+#### 策略三：允许删除图片（DELETE）
 
-6. 点击 **"Review"**，然后点击 **"Save policy"**
+1. 再次点击 **"New Policy"**
+2. 填写表单：
+   - **Policy name**：输入 `Allow public deletes`
+   - **Allowed operation**：✅ **只勾选 "DELETE"**（其他不要勾选）
+   - **Target roles**：保持默认
+   - **Policy definition**：输入：
+     ```sql
+     bucket_id = 'case-images'
+     ```
+3. 点击 **"Review"**，然后点击 **"Save policy"**
+
+#### 完成检查
+
+配置完成后，你应该看到 3 个策略：
+- ✅ `Allow public uploads` - INSERT
+- ✅ `Allow public access` - SELECT
+- ✅ `Allow public deletes` - DELETE
+
+**详细说明**：查看 `SUPABASE_STORAGE_POLICY_GUIDE.md`
 
 ---
 

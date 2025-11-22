@@ -1,4 +1,4 @@
-import { supabase, isSupabaseReady } from '../lib/supabase';
+import { supabase, isSupabaseReady, getSupabaseClient } from '../lib/supabase';
 import { uploadImageToOSS, deleteImageFromOSS, isOSSEnabled } from './ossService';
 
 // 本地存储键名
@@ -33,12 +33,13 @@ const saveCasesToLocalStorage = (cases) => {
  */
 export const getCases = async () => {
   // 如果 Supabase 未配置，使用本地存储
-  if (!isSupabaseReady()) {
+  const client = getSupabaseClient();
+  if (!client) {
     return getCasesFromLocalStorage();
   }
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from('cases')
       .select('*')
       .order('created_at', { ascending: false });
@@ -57,23 +58,23 @@ export const getCases = async () => {
  */
 export const createCase = async (caseData) => {
   // 检查 Supabase 是否可用
-  const supabaseReady = isSupabaseReady();
+  const client = getSupabaseClient();
   console.log('创建案例 - Supabase 检查:', {
-    isReady: supabaseReady,
-    supabaseExists: !!supabase,
-    hasFromMethod: typeof supabase?.from === 'function',
-    supabaseType: typeof supabase
+    isReady: isSupabaseReady(),
+    clientExists: !!client,
+    hasFromMethod: client ? typeof client.from === 'function' : false,
+    clientType: typeof client
   });
 
   // 如果 Supabase 未配置或无效，使用本地存储
-  if (!supabaseReady || !supabase || typeof supabase.from !== 'function') {
+  if (!client) {
     console.warn('Supabase 不可用，使用本地存储');
     return createCaseLocal(caseData);
   }
 
   try {
     console.log('开始创建案例，Supabase 状态:', isSupabaseReady());
-    console.log('Supabase 客户端:', supabase ? '已初始化' : '未初始化');
+    console.log('Supabase 客户端:', client ? '已初始化' : '未初始化');
     
     // 1. 先上传图片（优先使用OSS，然后是Supabase，最后降级到Base64）
     console.log('开始上传图片...');
@@ -83,11 +84,11 @@ export const createCase = async (caseData) => {
 
     // 2. 保存案例数据到数据库
     console.log('开始保存数据到数据库...');
-    console.log('Supabase 客户端类型:', typeof supabase);
-    console.log('Supabase from 方法:', typeof supabase?.from);
     
-    if (!supabase || typeof supabase.from !== 'function') {
-      throw new Error('Supabase 客户端未正确初始化');
+    // 再次获取客户端，确保在异步操作中仍然有效
+    const dbClient = getSupabaseClient();
+    if (!dbClient) {
+      throw new Error('Supabase 客户端在操作过程中变为无效');
     }
     
     const insertData = {
@@ -99,7 +100,7 @@ export const createCase = async (caseData) => {
     };
     console.log('插入数据:', insertData);
     
-    const { data, error } = await supabase
+    const { data, error } = await dbClient
       .from('cases')
       .insert([insertData])
       .select()
@@ -192,7 +193,8 @@ const uploadImage = async (file, fileName) => {
   }
 
   // 优先级2：尝试使用Supabase Storage（如果已配置）
-  if (isSupabaseReady()) {
+  const client = getSupabaseClient();
+  if (client && client.storage) {
     try {
       // 如果是 base64 数据，先转换为 Blob
       let blob;
@@ -209,7 +211,13 @@ const uploadImage = async (file, fileName) => {
       const fileExt = fileName.split('.').pop() || 'jpg';
       const filePath = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
 
-      const { data, error } = await supabase.storage
+      // 再次获取客户端，确保在异步操作中仍然有效
+      const storageClient = getSupabaseClient();
+      if (!storageClient || !storageClient.storage || typeof storageClient.storage.from !== 'function') {
+        throw new Error('Supabase storage not available');
+      }
+
+      const { data, error } = await storageClient.storage
         .from('case-images')
         .upload(filePath, blob, {
           cacheControl: '3600',
@@ -219,7 +227,7 @@ const uploadImage = async (file, fileName) => {
       if (error) throw error;
 
       // 获取公开 URL
-      const { data: { publicUrl } } = supabase.storage
+      const { data: { publicUrl } } = storageClient.storage
         .from('case-images')
         .getPublicUrl(filePath);
 
@@ -248,13 +256,14 @@ const uploadImage = async (file, fileName) => {
  */
 export const deleteCase = async (id) => {
   // 如果 Supabase 未配置，使用本地存储
-  if (!isSupabaseReady()) {
+  const client = getSupabaseClient();
+  if (!client) {
     return deleteCaseLocal(id);
   }
 
   try {
     // 先获取案例数据，删除关联的图片
-    const { data: caseData } = await supabase
+    const { data: caseData } = await client
       .from('cases')
       .select('before_image, after_image')
       .eq('id', id)
@@ -269,18 +278,25 @@ export const deleteCase = async (id) => {
       }
       
       // 如果是Supabase Storage的图片，也删除
-      if (caseData.before_image && caseData.before_image.includes('supabase.co')) {
+      const storageClient = getSupabaseClient();
+      if (caseData.before_image && caseData.before_image.includes('supabase.co') && storageClient && storageClient.storage && typeof storageClient.storage.from === 'function') {
         const beforePath = caseData.before_image.split('/').pop();
-        await supabase.storage.from('case-images').remove([beforePath]);
+        await storageClient.storage.from('case-images').remove([beforePath]);
       }
-      if (caseData.after_image && caseData.after_image.includes('supabase.co')) {
+      if (caseData.after_image && caseData.after_image.includes('supabase.co') && storageClient && storageClient.storage && typeof storageClient.storage.from === 'function') {
         const afterPath = caseData.after_image.split('/').pop();
-        await supabase.storage.from('case-images').remove([afterPath]);
+        await storageClient.storage.from('case-images').remove([afterPath]);
       }
     }
 
+    // 再次获取客户端，确保在异步操作中仍然有效
+    const dbClient = getSupabaseClient();
+    if (!dbClient) {
+      throw new Error('Supabase 客户端在操作过程中变为无效');
+    }
+
     // 删除数据库记录
-    const { error } = await supabase
+    const { error } = await dbClient
       .from('cases')
       .delete()
       .eq('id', id);

@@ -38,16 +38,35 @@ if (isSupabaseConfigured) {
 
 export const supabase = supabaseClient;
 
+// 安全地检查 supabase 客户端是否可用
+const isSupabaseClientValid = (client) => {
+  if (!client) return false;
+  if (typeof client !== 'object') return false;
+  if (typeof client.from !== 'function') return false;
+  if (typeof client.storage !== 'object' || !client.storage) return false;
+  return true;
+};
+
 // 导出配置状态，供其他模块使用
 export const isSupabaseReady = () => {
-  const ready = isSupabaseConfigured && supabase !== null && typeof supabase?.from === 'function';
+  const ready = isSupabaseConfigured && isSupabaseClientValid(supabase);
   if (!ready && isSupabaseConfigured) {
     console.error('Supabase 配置了但客户端无效:', {
       isConfigured: isSupabaseConfigured,
       supabaseIsNull: supabase === null,
-      hasFromMethod: typeof supabase?.from === 'function'
+      supabaseType: typeof supabase,
+      hasFromMethod: typeof supabase?.from === 'function',
+      hasStorage: !!supabase?.storage
     });
   }
   return ready;
+};
+
+// 导出安全访问函数
+export const getSupabaseClient = () => {
+  if (isSupabaseReady() && isSupabaseClientValid(supabase)) {
+    return supabase;
+  }
+  return null;
 };
 

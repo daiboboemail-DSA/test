@@ -46,14 +46,7 @@ const isSupabaseClientValid = (client) => {
     if (typeof client.from !== 'function') return false;
     if (!client.storage || typeof client.storage !== 'object') return false;
     if (typeof client.storage.from !== 'function') return false;
-    // 测试 storage.from 是否返回有效对象
-    try {
-      const testBucket = client.storage.from('test');
-      if (!testBucket || typeof testBucket !== 'object') return false;
-    } catch (e) {
-      // 如果测试失败，说明 storage 不可用
-      return false;
-    }
+    // 不进行实际调用测试，只检查方法是否存在
     return true;
   } catch (error) {
     console.error('Error validating Supabase client:', error);

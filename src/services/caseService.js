@@ -196,6 +196,10 @@ const uploadImage = async (file, fileName) => {
   const client = getSupabaseClient();
   if (client && client.storage) {
     try {
+      console.log('尝试使用 Supabase Storage 上传图片...');
+      console.log('Client type:', typeof client);
+      console.log('Storage type:', typeof client.storage);
+      console.log('Storage.from type:', typeof client.storage.from);
       // 如果是 base64 数据，先转换为 Blob
       let blob;
       if (typeof file === 'string' && file.startsWith('data:')) {
@@ -224,30 +228,68 @@ const uploadImage = async (file, fileName) => {
       }
 
       // 安全地获取 storage bucket
-      const bucket = storageClient.storage.from('case-images');
-      if (!bucket || typeof bucket.upload !== 'function') {
+      console.log('准备获取 storage bucket...');
+      let bucket;
+      try {
+        bucket = storageClient.storage.from('case-images');
+        console.log('Bucket obtained, type:', typeof bucket);
+      } catch (bucketError) {
+        console.error('Failed to get bucket:', bucketError);
+        throw new Error(`Failed to get storage bucket: ${bucketError.message}`);
+      }
+      
+      if (!bucket || typeof bucket !== 'object') {
+        console.error('Bucket is invalid:', { bucket, type: typeof bucket });
         throw new Error('Supabase storage bucket is invalid');
       }
+      if (typeof bucket.upload !== 'function') {
+        console.error('Bucket.upload is not a function:', { bucket, uploadType: typeof bucket.upload });
+        throw new Error('Supabase storage bucket.upload is not a function');
+      }
+      console.log('Bucket validated, ready to upload');
 
-      const { data, error } = await bucket.upload(filePath, blob, {
-        cacheControl: '3600',
-        upsert: false,
-      });
+      // 使用 try-catch 包装 upload 调用，避免解构错误
+      let uploadResult;
+      try {
+        uploadResult = await bucket.upload(filePath, blob, {
+          cacheControl: '3600',
+          upsert: false,
+        });
+      } catch (uploadError) {
+        console.error('Upload error:', uploadError);
+        throw uploadError;
+      }
 
-      if (error) throw error;
+      // 安全地检查返回结果
+      if (!uploadResult) {
+        throw new Error('Upload returned no result');
+      }
+      if (uploadResult.error) {
+        throw uploadResult.error;
+      }
 
       // 获取公开 URL - 再次验证
       const urlBucket = storageClient.storage.from('case-images');
-      if (!urlBucket || typeof urlBucket.getPublicUrl !== 'function') {
-        throw new Error('Supabase getPublicUrl is not available');
+      if (!urlBucket || typeof urlBucket !== 'object') {
+        throw new Error('Supabase URL bucket is invalid');
+      }
+      if (typeof urlBucket.getPublicUrl !== 'function') {
+        throw new Error('Supabase getPublicUrl is not a function');
       }
 
-      const { data: urlData } = urlBucket.getPublicUrl(filePath);
-      if (!urlData || !urlData.publicUrl) {
-        throw new Error('Failed to get public URL');
+      let urlResult;
+      try {
+        urlResult = urlBucket.getPublicUrl(filePath);
+      } catch (urlError) {
+        console.error('GetPublicUrl error:', urlError);
+        throw urlError;
       }
 
-      return urlData.publicUrl;
+      if (!urlResult || !urlResult.data || !urlResult.data.publicUrl) {
+        throw new Error('Failed to get public URL from result');
+      }
+
+      return urlResult.data.publicUrl;
     } catch (error) {
       console.warn('Supabase upload failed, using Base64:', error);
     }

@@ -21,16 +21,26 @@ let OSS = null;
 
 // 动态加载OSS SDK（只在需要时加载，减少包体积）
 const loadOSS = async () => {
-  if (OSS) return OSS;
+  if (OSS !== undefined) return OSS; // 包括 null 的情况
+  
+  // 如果 OSS 未配置，直接返回 null
+  if (!isOSSConfigured) {
+    OSS = null;
+    return null;
+  }
   
   try {
     // 需要先安装：npm install ali-oss
-    const AliOSS = await import('ali-oss');
+    // 使用字符串形式的动态 import，避免构建时检查
+    const moduleName = 'ali-oss';
+    const AliOSS = await import(/* @vite-ignore */ moduleName);
     OSS = AliOSS.default;
     return OSS;
   } catch (error) {
-    console.error('Failed to load OSS SDK:', error);
-    throw new Error('OSS SDK not installed. Run: npm install ali-oss');
+    // OSS SDK 未安装，返回 null 而不是抛出错误
+    console.warn('OSS SDK not installed. OSS features will be disabled. To enable, run: npm install ali-oss');
+    OSS = null;
+    return null;
   }
 };
 
@@ -39,10 +49,14 @@ const loadOSS = async () => {
  */
 const getOSSClient = async () => {
   if (!isOSSConfigured) {
-    throw new Error('OSS not configured. Please set OSS environment variables.');
+    return null;
   }
   
   const AliOSS = await loadOSS();
+  if (!AliOSS) {
+    return null; // OSS SDK 未安装
+  }
+  
   return new AliOSS({
     region: OSS_CONFIG.region,
     accessKeyId: OSS_CONFIG.accessKeyId,
@@ -74,6 +88,18 @@ export const uploadImageToOSS = async (file, fileName = null) => {
 
   try {
     const client = await getOSSClient();
+    if (!client) {
+      // OSS SDK 未安装，降级到 Base64
+      if (typeof file === 'string') {
+        return file;
+      }
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
     
     // 生成文件名
     if (!fileName) {

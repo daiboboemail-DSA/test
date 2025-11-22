@@ -62,26 +62,44 @@ export const createCase = async (caseData) => {
   }
 
   try {
+    console.log('开始创建案例，Supabase 状态:', isSupabaseReady());
+    console.log('Supabase 客户端:', supabase ? '已初始化' : '未初始化');
+    
     // 1. 先上传图片（优先使用OSS，然后是Supabase，最后降级到Base64）
+    console.log('开始上传图片...');
     const beforeImageUrl = await uploadImage(caseData.beforeFile, `before_${Date.now()}`);
     const afterImageUrl = await uploadImage(caseData.afterFile, `after_${Date.now()}`);
+    console.log('图片上传完成:', { beforeImageUrl: beforeImageUrl?.substring(0, 50), afterImageUrl: afterImageUrl?.substring(0, 50) });
 
     // 2. 保存案例数据到数据库
+    console.log('开始保存数据到数据库...');
+    const insertData = {
+      title: caseData.title,
+      tag: caseData.tag || '未分类案例',
+      "desc": caseData.desc || '效果显著', // 注意：desc 需要用引号，因为它是保留关键字
+      before_image: beforeImageUrl,
+      after_image: afterImageUrl,
+    };
+    console.log('插入数据:', insertData);
+    
     const { data, error } = await supabase
       .from('cases')
-      .insert([
-        {
-          title: caseData.title,
-          tag: caseData.tag || '未分类案例',
-          desc: caseData.desc || '效果显著',
-          before_image: beforeImageUrl,
-          after_image: afterImageUrl,
-        },
-      ])
+      .insert([insertData])
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('数据库插入错误:', error);
+      console.error('错误详情:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint
+      });
+      throw error;
+    }
+    
+    console.log('数据保存成功:', data);
     return data;
   } catch (error) {
     console.error('Error creating case:', error);

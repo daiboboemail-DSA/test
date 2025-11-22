@@ -191,39 +191,34 @@ const createCaseLocal = async (caseData) => {
 };
 
 /**
- * 上传图片（优先级：OSS > Supabase Storage > Base64本地存储）
+ * 上传图片（临时方案：直接使用 Base64）
  */
 const uploadImage = async (file, fileName) => {
-  // 优先级1：尝试使用OSS（如果已配置）
-  if (isOSSEnabled()) {
-    try {
-      const url = await uploadImageToOSS(file, fileName);
-      if (url && !url.startsWith('data:')) {
-        // OSS上传成功，返回OSS URL
-        return url;
-      }
-      // OSS上传失败，继续尝试其他方案
-    } catch (error) {
-      console.warn('OSS upload failed, trying Supabase:', error);
-    }
-  }
-
-  // 优先级2：暂时禁用 Supabase Storage（避免 op is not a function 错误）
-  // TODO: 修复 Supabase Storage 上传功能
-  // 直接跳过 Supabase Storage，使用 Base64
-  console.log('跳过 Supabase Storage，使用 Base64 存储');
-
-  // 优先级3：降级到Base64本地存储
+  console.log('开始上传图片到 Base64...');
+  
+  // 如果已经是 Base64 字符串，直接返回
   if (typeof file === 'string' && file.startsWith('data:')) {
+    console.log('文件已经是 Base64 格式');
     return file;
   }
   
-  // 转换为Base64
+  // 转换为 Base64
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
+    try {
+      const reader = new FileReader();
+      reader.onload = () => {
+        console.log('Base64 转换成功');
+        resolve(reader.result);
+      };
+      reader.onerror = (error) => {
+        console.error('Base64 转换失败:', error);
+        reject(error);
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('创建 FileReader 失败:', error);
+      reject(error);
+    }
   });
 };
 

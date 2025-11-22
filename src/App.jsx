@@ -703,6 +703,21 @@ const BeforeAfterSlider = ({ before, after, alt }) => {
   const [sliderPosition, setSliderPosition] = useState(50);
   const [isDragging, setIsDragging] = useState(false);
   const containerRef = useRef(null);
+  
+  // 验证图片 URL 是否有效
+  const isValidImage = (url) => {
+    if (!url) return false;
+    if (typeof url !== 'string') return false;
+    // 如果是 Base64 数据 URL，直接返回 true
+    if (url.startsWith('data:image/')) return true;
+    // 如果是 HTTP/HTTPS URL，返回 true
+    if (url.startsWith('http://') || url.startsWith('https://')) return true;
+    // 其他情况（如占位符文本）返回 false
+    return false;
+  };
+  
+  const validBefore = isValidImage(before) ? before : null;
+  const validAfter = isValidImage(after) ? after : null;
 
   const handleMove = useCallback(
     (event) => {
@@ -742,11 +757,19 @@ const BeforeAfterSlider = ({ before, after, alt }) => {
     >
       {/* AFTER 图片 - 底层，完整显示 */}
       <div className="absolute inset-0 w-full h-full flex items-center justify-center">
-        <img
-          src={after}
-          alt={`After ${alt}`}
-          className="max-w-full max-h-full w-auto h-auto object-contain pointer-events-none"
-        />
+        {validAfter ? (
+          <img
+            src={validAfter}
+            alt={`After ${alt}`}
+            className="max-w-full max-h-full w-auto h-auto object-contain pointer-events-none"
+            onError={(e) => {
+              console.warn('Failed to load after image:', validAfter);
+              e.target.style.display = 'none';
+            }}
+          />
+        ) : (
+          <div className="text-gray-400 text-center p-8">图片不可用</div>
+        )}
         <div className="absolute top-6 right-6 bg-black/50 backdrop-blur-sm text-white text-sm font-bold px-4 py-2 rounded-full z-10">
           AFTER
         </div>
@@ -757,11 +780,19 @@ const BeforeAfterSlider = ({ before, after, alt }) => {
         className="absolute inset-0 w-full h-full overflow-hidden flex items-center justify-center"
         style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }}
       >
-        <img
-          src={before}
-          alt={`Before ${alt}`}
-          className="max-w-full max-h-full w-auto h-auto object-contain pointer-events-none"
-        />
+        {validBefore ? (
+          <img
+            src={validBefore}
+            alt={`Before ${alt}`}
+            className="max-w-full max-h-full w-auto h-auto object-contain pointer-events-none"
+            onError={(e) => {
+              console.warn('Failed to load before image:', validBefore);
+              e.target.style.display = 'none';
+            }}
+          />
+        ) : (
+          <div className="text-gray-400 text-center p-8">图片不可用</div>
+        )}
         <div className="absolute top-6 left-6 bg-white/80 backdrop-blur-sm text-black text-sm font-bold px-4 py-2 rounded-full z-10">
           BEFORE
         </div>

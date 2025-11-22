@@ -32,7 +32,12 @@ const saveCasesToLocalStorage = (cases) => {
  * 获取所有案例
  */
 export const getCases = async () => {
-  // 如果 Supabase 未配置，使用本地存储
+  // 临时方案：完全禁用 Supabase，只使用本地存储
+  // TODO: 修复 Supabase 的 op is not a function 错误
+  console.log('⚠️ 使用本地存储获取案例（Supabase 暂时禁用）');
+  return getCasesFromLocalStorage();
+  
+  /* 原始 Supabase 代码（暂时禁用）
   const client = getSupabaseClient();
   if (!client) {
     return getCasesFromLocalStorage();
@@ -48,15 +53,21 @@ export const getCases = async () => {
     return data || [];
   } catch (error) {
     console.error('Error fetching cases:', error);
-    // 降级到本地存储
     return getCasesFromLocalStorage();
   }
+  */
 };
 
 /**
  * 上传案例（包含图片）
  */
 export const createCase = async (caseData) => {
+  // 临时方案：完全禁用 Supabase，只使用本地存储
+  // TODO: 修复 Supabase 的 op is not a function 错误
+  console.warn('⚠️ 临时使用本地存储（Supabase 暂时禁用）');
+  return createCaseLocal(caseData);
+  
+  /* 原始 Supabase 代码（暂时禁用）
   // 检查 Supabase 是否可用
   const client = getSupabaseClient();
   console.log('创建案例 - Supabase 检查:', {
@@ -131,6 +142,7 @@ export const createCase = async (caseData) => {
     alert(`保存失败：${error.message}\n\n数据已保存到本地，但刷新后会丢失。\n请检查 Supabase 配置。`);
     return createCaseLocal(caseData);
   }
+  */
 };
 
 /**
@@ -138,30 +150,34 @@ export const createCase = async (caseData) => {
  */
 const createCaseLocal = async (caseData) => {
   try {
-    // 注意：本地存储不适合存储大图片（Base64），会导致 QuotaExceededError
-    // 这里只保存文本信息，不保存图片
-    console.warn('⚠️ 使用本地存储（Supabase 未配置或连接失败）');
-    console.warn('⚠️ 本地存储不支持大图片，只保存文本信息');
+    console.warn('⚠️ 使用本地存储（Supabase 暂时禁用）');
+    
+    // 先上传图片为 Base64
+    console.log('开始上传图片到 Base64...');
+    const beforeImageUrl = await uploadImage(caseData.beforeFile, `before_${Date.now()}`);
+    const afterImageUrl = await uploadImage(caseData.afterFile, `after_${Date.now()}`);
+    console.log('图片上传完成');
     
     const newCase = {
       id: Date.now(),
       title: caseData.title,
       tag: caseData.tag || '未分类案例',
       desc: caseData.desc || '效果显著',
-      before_image: '[本地存储不支持图片]',
-      after_image: '[本地存储不支持图片]',
+      before_image: beforeImageUrl,
+      after_image: afterImageUrl,
       created_at: new Date().toISOString(),
     };
 
-    // 保存到本地存储（只保存文本信息）
+    // 保存到本地存储（包含 Base64 图片）
     try {
       const cases = getCasesFromLocalStorage();
       cases.unshift(newCase);
       saveCasesToLocalStorage(cases);
+      console.log('✅ 案例已保存到本地存储');
     } catch (storageError) {
       if (storageError.name === 'QuotaExceededError') {
         console.error('❌ 本地存储空间已满，无法保存数据');
-        alert('存储空间不足，无法保存到本地。请配置 Supabase 以使用云端存储。');
+        alert('存储空间不足，无法保存到本地。图片太大，请配置 Supabase 以使用云端存储。');
         throw new Error('本地存储空间已满');
       }
       throw storageError;
@@ -215,14 +231,18 @@ const uploadImage = async (file, fileName) => {
  * 删除案例
  */
 export const deleteCase = async (id) => {
-  // 如果 Supabase 未配置，使用本地存储
+  // 临时方案：完全禁用 Supabase，只使用本地存储
+  // TODO: 修复 Supabase 的 op is not a function 错误
+  console.log('⚠️ 使用本地存储删除案例（Supabase 暂时禁用）');
+  return deleteCaseLocal(id);
+  
+  /* 原始 Supabase 代码（暂时禁用）
   const client = getSupabaseClient();
   if (!client) {
     return deleteCaseLocal(id);
   }
 
   try {
-    // 先获取案例数据，删除关联的图片
     const { data: caseData } = await client
       .from('cases')
       .select('before_image, after_image')
@@ -230,32 +250,17 @@ export const deleteCase = async (id) => {
       .single();
 
     if (caseData) {
-      // 删除图片（支持OSS和Supabase）
-      // 优先尝试OSS删除
       if (isOSSEnabled()) {
         await deleteImageFromOSS(caseData.before_image);
         await deleteImageFromOSS(caseData.after_image);
       }
-      
-      // 如果是Supabase Storage的图片，也删除
-      const storageClient = getSupabaseClient();
-      if (caseData.before_image && caseData.before_image.includes('supabase.co') && storageClient && storageClient.storage && typeof storageClient.storage.from === 'function') {
-        const beforePath = caseData.before_image.split('/').pop();
-        await storageClient.storage.from('case-images').remove([beforePath]);
-      }
-      if (caseData.after_image && caseData.after_image.includes('supabase.co') && storageClient && storageClient.storage && typeof storageClient.storage.from === 'function') {
-        const afterPath = caseData.after_image.split('/').pop();
-        await storageClient.storage.from('case-images').remove([afterPath]);
-      }
     }
 
-    // 再次获取客户端，确保在异步操作中仍然有效
     const dbClient = getSupabaseClient();
     if (!dbClient) {
       throw new Error('Supabase 客户端在操作过程中变为无效');
     }
 
-    // 删除数据库记录
     const { error } = await dbClient
       .from('cases')
       .delete()
@@ -265,9 +270,9 @@ export const deleteCase = async (id) => {
     return true;
   } catch (error) {
     console.error('Error deleting case:', error);
-    // 降级到本地存储
     return deleteCaseLocal(id);
   }
+  */
 };
 
 /**

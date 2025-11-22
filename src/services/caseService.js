@@ -1,4 +1,5 @@
 import { supabase, isSupabaseReady } from '../lib/supabase';
+import { uploadImageToOSS, deleteImageFromOSS, isOSSEnabled } from './ossService';
 
 // 本地存储键名
 const STORAGE_KEY = 'case_library_cases';
@@ -61,7 +62,7 @@ export const createCase = async (caseData) => {
   }
 
   try {
-    // 1. 先上传图片到 Supabase Storage
+    // 1. 先上传图片（优先使用OSS，然后是Supabase，最后降级到Base64）
     const beforeImageUrl = await uploadImage(caseData.beforeFile, `before_${Date.now()}`);
     const afterImageUrl = await uploadImage(caseData.afterFile, `after_${Date.now()}`);
 
@@ -135,47 +136,73 @@ const createCaseLocal = async (caseData) => {
 };
 
 /**
- * 上传图片到 Supabase Storage
+ * 上传图片（优先级：OSS > Supabase Storage > Base64本地存储）
  */
 const uploadImage = async (file, fileName) => {
-  try {
-    // 如果是 base64 数据，先转换为 Blob
-    let blob;
-    if (typeof file === 'string' && file.startsWith('data:')) {
-      // base64 数据 URL
-      const response = await fetch(file);
-      blob = await response.blob();
-    } else if (file instanceof File) {
-      blob = file;
-    } else {
-      throw new Error('Invalid file format');
+  // 优先级1：尝试使用OSS（如果已配置）
+  if (isOSSEnabled()) {
+    try {
+      const url = await uploadImageToOSS(file, fileName);
+      if (url && !url.startsWith('data:')) {
+        // OSS上传成功，返回OSS URL
+        return url;
+      }
+      // OSS上传失败，继续尝试其他方案
+    } catch (error) {
+      console.warn('OSS upload failed, trying Supabase:', error);
     }
-
-    // 上传到 Supabase Storage
-    const fileExt = fileName.split('.').pop() || 'jpg';
-    const filePath = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-
-    const { data, error } = await supabase.storage
-      .from('case-images')
-      .upload(filePath, blob, {
-        cacheControl: '3600',
-        upsert: false,
-      });
-
-    if (error) throw error;
-
-    // 获取公开 URL
-    const { data: { publicUrl } } = supabase.storage
-      .from('case-images')
-      .getPublicUrl(filePath);
-
-    return publicUrl;
-  } catch (error) {
-    console.error('Error uploading image:', error);
-    // 如果上传失败，返回 base64 数据（降级方案）
-    if (typeof file === 'string') return file;
-    throw error;
   }
+
+  // 优先级2：尝试使用Supabase Storage（如果已配置）
+  if (isSupabaseReady()) {
+    try {
+      // 如果是 base64 数据，先转换为 Blob
+      let blob;
+      if (typeof file === 'string' && file.startsWith('data:')) {
+        const response = await fetch(file);
+        blob = await response.blob();
+      } else if (file instanceof File) {
+        blob = file;
+      } else {
+        throw new Error('Invalid file format');
+      }
+
+      // 上传到 Supabase Storage
+      const fileExt = fileName.split('.').pop() || 'jpg';
+      const filePath = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+      const { data, error } = await supabase.storage
+        .from('case-images')
+        .upload(filePath, blob, {
+          cacheControl: '3600',
+          upsert: false,
+        });
+
+      if (error) throw error;
+
+      // 获取公开 URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('case-images')
+        .getPublicUrl(filePath);
+
+      return publicUrl;
+    } catch (error) {
+      console.warn('Supabase upload failed, using Base64:', error);
+    }
+  }
+
+  // 优先级3：降级到Base64本地存储
+  if (typeof file === 'string' && file.startsWith('data:')) {
+    return file;
+  }
+  
+  // 转换为Base64
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 };
 
 /**
@@ -196,7 +223,14 @@ export const deleteCase = async (id) => {
       .single();
 
     if (caseData) {
-      // 从 Storage 删除图片（如果存在）
+      // 删除图片（支持OSS和Supabase）
+      // 优先尝试OSS删除
+      if (isOSSEnabled()) {
+        await deleteImageFromOSS(caseData.before_image);
+        await deleteImageFromOSS(caseData.after_image);
+      }
+      
+      // 如果是Supabase Storage的图片，也删除
       if (caseData.before_image && caseData.before_image.includes('supabase.co')) {
         const beforePath = caseData.before_image.split('/').pop();
         await supabase.storage.from('case-images').remove([beforePath]);
